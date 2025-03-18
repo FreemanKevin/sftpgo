@@ -24,9 +24,8 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.GHCR_TOKEN }}  # 使用 PAT 或 GITHUB_TOKEN
 
-      # 构建并推送多架构镜像
       - name: Build and Push Multi-Arch Image
         uses: docker/build-push-action@v6
         with:
@@ -35,5 +34,13 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}:latest
-            ghcr.io/${{ github.repository }}:${{ github.sha }}
+            ghcr.io/freemankevin/sftpgo:latest
+            ghcr.io/freemankevin/sftpgo:${{ github.sha }}
+          # 确保 latest 标签正确应用
+          outputs: type=image,name=ghcr.io/freemankevin/sftpgo:latest,push=true
+
+      - name: Verify Tags
+        run: |
+          echo "Checking tags in GHCR..."
+          docker manifest inspect ghcr.io/freemankevin/sftpgo:latest || echo "Tag latest not found"
+          docker manifest inspect ghcr.io/freemankevin/sftpgo:${{ github.sha }} || echo "Tag SHA not found"
