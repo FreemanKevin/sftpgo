@@ -1,0 +1,113 @@
+#version: "3"
+
+services:
+  sftpgo:
+    image: ${SFTPGO_IMAGE}
+    container_name: sftpgo
+    restart: unless-stopped
+    ports:
+      - "${SFTPGO_PORT_WEB}:8080"     # Web management interface
+      - "${SFTPGO_PORT_SFTP}:2022"    # SFTP port
+      - "${SFTPGO_PORT_FTP}:21"       # FTP port
+      - "${SFTPGO_PORT_WEBDAV}:8090"  # WEBDAV port
+      - "50000-50100:50000-50100"     # FTP passive mode port range
+    volumes:
+      - /data/sftpgo/data:/srv/sftpgo       # Data storage
+      - /data/sftpgo/logs:/var/log/sftpgo   # Log storage
+      - ./certs/sftpgo.crt:/etc/sftpgo/sftpgo.crt  # FTPS and WebDAV certificate
+      - ./certs/sftpgo.key:/etc/sftpgo/sftpgo.key  # FTPS and WebDAV private key
+    environment:
+      - SFTPGO_SFTPD__BINDINGS__0__PORT=2022
+      - SFTPGO_SFTPD__BINDINGS__0__ADDRESS=0.0.0.0
+      - SFTPGO_WEBDAVD__BINDINGS__0__PORT=8090
+      - SFTPGO_WEBDAVD__BINDINGS__0__ADDRESS=0.0.0.0
+      - SFTPGO_WEBDAVD__BINDINGS__0__ENABLE_HTTPS=true
+      - SFTPGO_WEBDAVD__BINDINGS__0__CERT_FILE=/etc/sftpgo/sftpgo.crt
+      - SFTPGO_WEBDAVD__BINDINGS__0__KEY_FILE=/etc/sftpgo/sftpgo.key
+      - SFTPGO_FTPD__BINDINGS__0__PORT=21
+      - SFTPGO_FTPD__BINDINGS__0__ADDRESS=0.0.0.0
+      - SFTPGO_FTPD__FORCE_PASSIVE_IP=192.168.1.100
+      - SFTPGO_FTPD__PASSIVE_PORT_RANGE=50000-50100
+      - SFTPGO_FTPD__CERT_FILE=/etc/sftpgo/sftpgo.crt
+      - SFTPGO_FTPD__KEY_FILE=/etc/sftpgo/sftpgo.key
+      - SFTPGO_COMMON__DEFENDER__ENABLED=true
+      - SFTPGO_COMMON__DEFENDER__BAN_TIME=15
+      - SFTPGO_COMMON__DEFENDER__THRESHOLD=5
+      - SFTPGO_DATA_PROVIDER__DRIVER=postgresql
+      - SFTPGO_DATA_PROVIDER__NAME=${POSTGRES_DB}
+      - SFTPGO_DATA_PROVIDER__HOST=db
+      - SFTPGO_DATA_PROVIDER__PORT=5432
+      - SFTPGO_DATA_PROVIDER__USERNAME=${POSTGRES_USER}
+      - SFTPGO_DATA_PROVIDER__PASSWORD=${POSTGRES_PASS}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/api/v2/status || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    networks:
+      - sftpgo-net
+
+  db:
+    image: ${POSTGRES_IMAGE}
+    container_name: sftpgo-postgres
+    deploy:
+      resources:
+        limits:
+          memory: 8192M
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    environment:
+      - TZ=Asia/Shanghai
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASS}
+      - ALLOW_IP_RANGE=0.0.0.0/0
+      - POSTGRES_MULTIPLE_EXTENSIONS=postgis,hstore,postgis_topology,postgis_raster,pgrouting
+      - RUN_AS_ROOT=true
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "PGPASSWORD=${POSTGRES_PASS} pg_isready -h localhost -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /data/sftpgo/postgres/data:/var/lib/postgresql/data
+      - /data/sftpgo/postgres/dbbackups:/backups
+    networks:
+      - sftpgo-net
+
+  dbbackups:
+    image: ${POSTGRES_BACKUP_IMAGE}
+    container_name: sftpgo-postgres-backup
+    hostname: sftpgo-postgres-backup
+    deploy:
+      resources:
+        limits:
+          memory: 4096M
+    environment:
+      - TZ=Asia/Shanghai
+      - DUMPPREFIX=PG_db
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASS=${POSTGRES_PASS}
+      - POSTGRES_PORT=5432
+      - POSTGRES_HOST=db
+      - CRON_SCHEDULE=0 2 * * *
+      - REMOVE_BEFORE=7776000
+    restart: always
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /data/sftpgo/postgres/dbbackups:/backups
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - sftpgo-net
+
+networks:
+  sftpgo-net:
+    driver: bridge
