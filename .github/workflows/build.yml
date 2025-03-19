@@ -26,18 +26,28 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and Push Multi-Arch Image
+      - name: Build and Push AMD64 Image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
           tags: |
-            ghcr.io/freemankevin/sftpgo:latest
-          outputs: type=image,name=ghcr.io/freemankevin/sftpgo:latest,push=true
+            ghcr.io/freemankevin/sftpgo-amd64:latest
 
+      - name: Build and Push ARM64 Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ghcr.io/freemankevin/sftpgo-arm64:latest
+            
       - name: Verify Tags
         run: |
           echo "Checking tags in GHCR..."
-          docker manifest inspect ghcr.io/freemankevin/sftpgo:latest || echo "Tag latest not found"
+          docker manifest inspect ghcr.io/freemankevin/sftpgo-amd64:latest || echo "Tag sftpgo-amd64:latest not found"
+          docker manifest inspect ghcr.io/freemankevin/sftpgo-arm64:latest || echo "Tag sftpgo-arm64:latest not found"
