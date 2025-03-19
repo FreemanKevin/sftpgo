@@ -35,6 +35,7 @@ jobs:
           push: true
           tags: |
             ghcr.io/freemankevin/sftpgo-amd64:latest
+            ghcr.io/freemankevin/sftpgo-amd64:${{ github.sha }}
 
       - name: Build and Push ARM64 Image
         uses: docker/build-push-action@v6
@@ -45,9 +46,18 @@ jobs:
           push: true
           tags: |
             ghcr.io/freemankevin/sftpgo-arm64:latest
-            
+            ghcr.io/freemankevin/sftpgo-arm64:${{ github.sha }}
+
+      - name: Create and Push Multi-Arch Manifest
+        run: |
+          docker buildx imagetools create \
+            --tag ghcr.io/freemankevin/sftpgo:latest \
+            ghcr.io/freemankevin/sftpgo-amd64:latest \
+            ghcr.io/freemankevin/sftpgo-arm64:latest
+
       - name: Verify Tags
         run: |
           echo "Checking tags in GHCR..."
           docker manifest inspect ghcr.io/freemankevin/sftpgo-amd64:latest || echo "Tag sftpgo-amd64:latest not found"
           docker manifest inspect ghcr.io/freemankevin/sftpgo-arm64:latest || echo "Tag sftpgo-arm64:latest not found"
+          docker manifest inspect ghcr.io/freemankevin/sftpgo:latest || echo "Tag sftpgo:latest not found"
